@@ -1,0 +1,18 @@
+Options -Indexes
+
+# Apache can drop the Authorization header before PHP sees it. Pass it through
+# so Bearer-token login works on XAMPP and shared hosting.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+</IfModule>
+<IfModule mod_setenvif.c>
+  SetEnvIfNoCase ^Authorization$ "(.+)" HTTP_AUTHORIZATION=$1
+</IfModule>
+
+<FilesMatch "^(config\.php|config\.example\.php)$">
+  Require all denied
+</FilesMatch>
+<Files "daily_notifications.php">
+  Require all denied
+</Files>
