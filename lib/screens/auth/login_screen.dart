@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/app_state.dart';
+import '../../services/backend_service.dart';
 import '../../utils/app_colors.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
@@ -57,6 +58,95 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  void _showServerConfigDialog() {
+    final controller = TextEditingController(text: BackendService.baseUrl);
+    String? testStatus;
+    bool testing = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          title: Text('Backend Server URL'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Enter your cloud hosted URL or your PC local IP (e.g. http://192.168.1.X/student_expense_manager_backend/backend/api.php):',
+                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              ),
+              SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                decoration: InputDecoration(
+                  labelText: 'API Base URL',
+                  hintText: 'https://your-domain/backend/api.php',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              SizedBox(height: 10),
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: testing
+                        ? null
+                        : () async {
+                            setDlgState(() {
+                              testing = true;
+                              testStatus = null;
+                            });
+                            final ok = await BackendService.testConnection(controller.text.trim());
+                            setDlgState(() {
+                              testing = false;
+                              testStatus = ok
+                                  ? 'Connected! Database is reachable.'
+                                  : 'Connection failed. Check URL or Wi-Fi.';
+                            });
+                          },
+                    icon: testing
+                        ? SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                        : Icon(Icons.wifi_tethering, size: 16),
+                    label: Text(testing ? 'Testing…' : 'Test Connection'),
+                  ),
+                ],
+              ),
+              if (testStatus != null) ...[
+                SizedBox(height: 8),
+                Text(
+                  testStatus!,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: testStatus!.contains('Connected') ? AppColors.income : AppColors.expense,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                BackendService.setCustomUrl('');
+                setState(() {});
+                Navigator.pop(ctx);
+              },
+              child: Text('Reset Default'),
+            ),
+            FilledButton(
+              onPressed: () {
+                BackendService.setCustomUrl(controller.text.trim());
+                setState(() {});
+                Navigator.pop(ctx);
+              },
+              child: Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -83,6 +173,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   OutlinedButton.icon(onPressed: _google, icon: Icon(Icons.account_circle_outlined), label: Text('Continue with Google'), style: OutlinedButton.styleFrom(minimumSize: Size.fromHeight(50))),
                   SizedBox(height: 20),
                   Row(mainAxisAlignment: MainAxisAlignment.center, children: [Text('New student?', style: TextStyle(color: AppColors.textSecondary)), TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RegisterScreen())), child: Text('Create account'))]),
+                  SizedBox(height: 14),
+                  TextButton.icon(
+                    onPressed: _showServerConfigDialog,
+                    icon: Icon(Icons.dns_outlined, size: 16, color: AppColors.textSecondary),
+                    label: Text(
+                      'Server: ${BackendService.baseUrl.length > 36 ? '${BackendService.baseUrl.substring(0, 33)}…' : BackendService.baseUrl}',
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    ),
+                  ),
                 ],
               ),
             ),

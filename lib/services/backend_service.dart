@@ -22,6 +22,50 @@ class BackendService {
     return 'http://10.0.2.2/student_expense_manager_backend/backend/api.php';
   }
 
+  static String get customUrl => StorageService.getSetting('custom_api_url') ?? '';
+
+  static void setCustomUrl(String url) {
+    StorageService.setSetting('custom_api_url', url.trim());
+  }
+
+  static Uri buildUri(String action, [Map<String, String>? queryParams]) {
+    var rawUrl = baseUrl.trim();
+    if (rawUrl.isEmpty) {
+      throw Exception('Server URL is empty. Please enter your backend URL.');
+    }
+    if (!rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')) {
+      rawUrl = 'http://$rawUrl';
+    }
+    final parsed = Uri.parse(rawUrl);
+    final params = Map<String, String>.from(parsed.queryParameters);
+    params['action'] = action;
+    if (queryParams != null) {
+      params.addAll(queryParams);
+    }
+    return parsed.replace(queryParameters: params);
+  }
+
+  static Future<bool> testConnection([String? testUrl]) async {
+    try {
+      var url = (testUrl != null && testUrl.trim().isNotEmpty) ? testUrl.trim() : baseUrl.trim();
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'http://$url';
+      }
+      final parsed = Uri.parse(url);
+      final params = Map<String, String>.from(parsed.queryParameters);
+      params['action'] = 'ping';
+      final uri = parsed.replace(queryParameters: params);
+      final res = await http.get(uri).timeout(const Duration(seconds: 6));
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        return data is Map && data['success'] == true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static String? token;
 
   static Map<String, String> _headers() {
@@ -34,11 +78,24 @@ class BackendService {
 
   static Future<Map<String, dynamic>> _post(
       String action, Map<String, dynamic> body,
-      {Duration timeout = const Duration(seconds: 12)}) async {
-    final response = await http
-        .post(Uri.parse('$baseUrl?action=$action'),
-            headers: _headers(), body: jsonEncode(body))
-        .timeout(timeout);
+      {Duration timeout = const Duration(seconds: 15)}) async {
+    http.Response response;
+    try {
+      final uri = buildUri(action);
+      response = await http
+          .post(uri, headers: _headers(), body: jsonEncode(body))
+          .timeout(timeout);
+    } on TimeoutException {
+      throw Exception('Connection timed out. Check that your server is running and reachable from this device.');
+    } on http.ClientException catch (e) {
+      throw Exception('Network error: ${e.message}. If using a local server, ensure your phone and PC are on the same Wi-Fi and using the PC IP address.');
+    } catch (e) {
+      final s = e.toString();
+      if (s.contains('SocketException') || s.contains('Connection refused') || s.contains('Failed host lookup')) {
+        throw Exception('Cannot reach server at $baseUrl. Check the server URL and your Wi-Fi/data connection.');
+      }
+      rethrow;
+    }
     Map<String, dynamic> data;
     try {
       final decoded = jsonDecode(response.body);
@@ -121,8 +178,9 @@ class BackendService {
   }
 
   static Future<Uint8List> downloadReceipt(String id) async {
+    final uri = buildUri('get_receipt', {'id': id});
     final response = await http.get(
-      Uri.parse('$baseUrl?action=get_receipt&id=${Uri.encodeQueryComponent(id)}'),
+      uri,
       headers: {
         if (token != null && token!.isNotEmpty) 'Authorization': 'Bearer $token',
       },

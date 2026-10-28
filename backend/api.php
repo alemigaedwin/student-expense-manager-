@@ -26,15 +26,55 @@ function input(): array {
     $json = json_decode($raw, true);
     return is_array($json) ? $json : ($_POST ?: []);
 }
+function ensureDatabaseAndTables(PDO $pdo, string $sqlPath): void {
+    static $checked = false;
+    if ($checked) return;
+    $checked = true;
+    try {
+        $check = $pdo->query("SHOW TABLES LIKE 'users'");
+        if ($check->rowCount() === 0 && file_exists($sqlPath)) {
+            $sql = file_get_contents($sqlPath);
+            if ($sql) {
+                $pdo->exec($sql);
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('Auto schema init notice: ' . $e->getMessage());
+    }
+}
+
 function db(array $c): PDO {
     static $pdo;
     if ($pdo instanceof PDO) return $pdo;
-    $dsn = "mysql:host={$c['db_host']};dbname={$c['db_name']};charset={$c['db_charset']}";
-    $pdo = new PDO($dsn, $c['db_user'], $c['db_password'], [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES => false,
-    ]);
+    $host = $c['db_host'] ?? '127.0.0.1';
+    $dbname = $c['db_name'] ?? 'student_expense_manager';
+    $user = $c['db_user'] ?? 'root';
+    $pass = $c['db_password'] ?? '';
+    $charset = $c['db_charset'] ?? 'utf8mb4';
+
+    try {
+        $dsn = "mysql:host={$host};dbname={$dbname};charset={$charset}";
+        $pdo = new PDO($dsn, $user, $pass, [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false,
+        ]);
+    } catch (PDOException $e) {
+        if ($e->getCode() == 1049 || stripos($e->getMessage(), 'Unknown database') !== false) {
+            $rootDsn = "mysql:host={$host};charset={$charset}";
+            $initPdo = new PDO($rootDsn, $user, $pass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+            $initPdo->exec("CREATE DATABASE IF NOT EXISTS `{$dbname}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+            $pdo = new PDO("mysql:host={$host};dbname={$dbname};charset={$charset}", $user, $pass, [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES => false,
+            ]);
+        } else {
+            throw $e;
+        }
+    }
+
+    ensureDatabaseAndTables($pdo, __DIR__ . '/student_expense_manager.sql');
     return $pdo;
 }
 function uuid(): string {
@@ -74,6 +114,10 @@ function dt($v): string {
     if ($v === null || $v === '') return date('Y-m-d H:i:s');
     try { $t = new DateTime((string)$v); } catch (Throwable $e) { $t = new DateTime(); }
     return $t->format('Y-m-d H:i:s');
+}
+function isoDate($v): string {
+    if ($v === null || $v === '') return date('c');
+    try { $ts = strtotime((string)$v); return $ts !== false ? date('c', $ts) : date('c'); } catch (Throwable $e) { return date('c'); }
 }
 function arr($v): array { return is_array($v) ? $v : []; }
 
@@ -133,7 +177,7 @@ function state(PDO $pdo, string $uid): array {
     foreach($out['transactions'] as &$t) {
         $t['amount']=(float)$t['amount'];
         $t['isDeleted']=(bool)$t['isDeleted'];
-        $t['date']=date('c',strtotime($t['date']));
+        $t['date']=isoDate($t['date'] ?? null);
         $t['items']=$items[$t['id']] ?? [];
         $t['billPaths']=$bills[$t['id']] ?? [];
     }
@@ -143,10 +187,10 @@ function state(PDO $pdo, string $uid): array {
         'id'=>$r['id'],'transactionId'=>$r['transaction_id'],'fileName'=>$r['file_name'],
         'mimeType'=>$r['mime_type'],'size'=>(int)$r['file_size'],
     ], $q->fetchAll());
-    foreach($out['budgets'] as &$r){$r['amount']=(float)$r['amount'];$r['periodStart']=date('c',strtotime($r['periodStart']));}
-    foreach($out['overallBudgets'] as &$r){$r['amount']=(float)$r['amount'];$r['periodStart']=date('c',strtotime($r['periodStart']));}
-    foreach($out['notes'] as &$r){$r['completed']=(bool)$r['completed'];$r['dateTime']=date('c',strtotime($r['dateTime']));}
-    foreach($out['reminders'] as &$r){$r['amount']=(float)$r['amount'];$r['nextDate']=date('c',strtotime($r['nextDate']));}
+    foreach($out['budgets'] as &$r){$r['amount']=(float)$r['amount'];$r['periodStart']=isoDate($r['periodStart'] ?? null);}
+    foreach($out['overallBudgets'] as &$r){$r['amount']=(float)$r['amount'];$r['periodStart']=isoDate($r['periodStart'] ?? null);}
+    foreach($out['notes'] as &$r){$r['completed']=(bool)$r['completed'];$r['dateTime']=isoDate($r['dateTime'] ?? null);}
+    foreach($out['reminders'] as &$r){$r['amount']=(float)$r['amount'];$r['nextDate']=isoDate($r['nextDate'] ?? null);}
     $q=$pdo->prepare('SELECT setting_key,setting_value FROM user_settings WHERE user_id=?');$q->execute([$uid]);
     $out['settings']=(object)[]; foreach($q->fetchAll() as $r)$out['settings']->{$r['setting_key']} = $r['setting_value'];
     return $out;
@@ -464,9 +508,9 @@ function insertInApp(PDO $pdo, string $uid, string $type, string $title, string 
 
 try {
     $pdo=db($config); $in=input(); $action=$_GET['action']??($in['action']??'');
-    if($action==='ping'){
+    if($action==='ping' || $action==='health' || ($action==='' && $_SERVER['REQUEST_METHOD']==='GET')){
         $pdo->query('SELECT 1');
-        respond(true,'Student Expense Manager API is running.',['database'=>'connected','server_time'=>date('c')]);
+        respond(true,'Student Expense Manager API is running and connected to database.',['database'=>'connected','database_name'=>$config['db_name']??'','server_time'=>date('c')]);
     }
     if($action==='register'){
         $name=trim((string)($in['name']??''));$email=strtolower(trim((string)($in['email']??'')));$password=(string)($in['password']??'');

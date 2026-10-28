@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/app_state.dart';
+import '../../services/backend_service.dart';
 import '../../utils/app_colors.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -160,6 +161,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
             trailing: Icon(Icons.refresh, color: AppColors.accent, size: 22),
             onTap: app.isSyncing ? null : app.syncNow,
           ),
+          ListTile(
+            leading: Icon(Icons.dns_outlined, color: AppColors.accent, size: 24),
+            title: Text('Backend Server URL',
+                style: TextStyle(color: AppColors.textPrimary)),
+            subtitle: Text(
+              BackendService.baseUrl,
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            ),
+            trailing: Icon(Icons.edit, color: AppColors.accent, size: 18),
+            onTap: _editServerUrl,
+          ),
           _sectionLabel('About'),
           ListTile(
             title: Text('Student Expense Manager',
@@ -204,6 +216,97 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Text('Save'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _editServerUrl() {
+    final controller = TextEditingController(text: BackendService.baseUrl);
+    String? testStatus;
+    bool testing = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: Text('Backend Server URL', style: TextStyle(color: AppColors.textPrimary)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Enter your cloud hosted URL or your PC local IP (e.g. http://192.168.1.X/student_expense_manager_backend/backend/api.php):',
+                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              ),
+              SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                style: TextStyle(color: AppColors.textPrimary),
+                decoration: InputDecoration(
+                  labelText: 'API Base URL',
+                  hintText: 'https://your-domain/backend/api.php',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              SizedBox(height: 10),
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: testing
+                        ? null
+                        : () async {
+                            setDlgState(() {
+                              testing = true;
+                              testStatus = null;
+                            });
+                            final ok = await BackendService.testConnection(controller.text.trim());
+                            setDlgState(() {
+                              testing = false;
+                              testStatus = ok
+                                  ? 'Connected! Database is reachable.'
+                                  : 'Connection failed. Check URL or Wi-Fi.';
+                            });
+                          },
+                    icon: testing
+                        ? SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                        : Icon(Icons.wifi_tethering, size: 16),
+                    label: Text(testing ? 'Testing…' : 'Test Connection'),
+                  ),
+                ],
+              ),
+              if (testStatus != null) ...[
+                SizedBox(height: 8),
+                Text(
+                  testStatus!,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: testStatus!.contains('Connected') ? AppColors.income : AppColors.expense,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                BackendService.setCustomUrl('');
+                setState(() {});
+                Navigator.pop(ctx);
+              },
+              child: Text('Reset Default'),
+            ),
+            FilledButton(
+              onPressed: () {
+                BackendService.setCustomUrl(controller.text.trim());
+                setState(() {});
+                Navigator.pop(ctx);
+              },
+              child: Text('Save'),
+            ),
+          ],
+        ),
       ),
     );
   }
