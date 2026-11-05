@@ -1,5 +1,5 @@
+import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
@@ -126,6 +126,16 @@ class BackendService {
   static Future<Map<String, dynamic>> login(
       String email, String password) {
     return _post('login', {'email': email, 'password': password});
+  }
+
+  static Future<Map<String, dynamic>> googleAuth(
+      String name, String email, [String? googleId, String? idToken]) {
+    return _post('google_auth', {
+      'name': name,
+      'email': email,
+      'google_id': googleId ?? '',
+      'id_token': idToken ?? '',
+    });
   }
 
   static Future<void> requestPasswordResetCode(String email) async {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/app_state.dart';
+import '../../services/storage_service.dart';
 import '../../utils/app_colors.dart';
 import '../settings/settings_screen.dart';
 import '../settings/backup_restore_screen.dart';
@@ -23,15 +24,25 @@ class DisplaySettingsDrawer extends StatelessWidget {
           padding: EdgeInsets.zero,
           children: [
             Container(
-              padding: EdgeInsets.symmetric(vertical: 24),
+              padding: EdgeInsets.symmetric(vertical: 24, horizontal: 16),
               color: AppColors.accent,
               child: Column(
                 children: [
-                  Icon(Icons.account_balance_wallet,
-                      color: Colors.white, size: 30),
-                  SizedBox(height: 6),
-                  Text('Income Expense',
-                      style: TextStyle(color: Colors.white, fontSize: 16)),
+                  CircleAvatar(
+                    radius: 26,
+                    backgroundColor: Colors.white,
+                    child: Icon(Icons.person, color: AppColors.accent, size: 30),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    app.userDisplayName,
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  if (StorageService.getSetting('auth_email') != null)
+                    Text(
+                      StorageService.getSetting('auth_email')!,
+                      style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 12),
+                    ),
                 ],
               ),
             ),
@@ -79,11 +90,6 @@ class DisplaySettingsDrawer extends StatelessWidget {
                   MaterialPageRoute(
                       builder: (_) => BackupRestoreScreen()));
             }),
-            _tile(context, Icons.ondemand_video, 'Remove Ads', () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Ads removed (demo)')));
-            }),
             _tile(context, Icons.delete_outline, 'Deleted Transactions', () {
               Navigator.push(
                   context,
@@ -93,16 +99,6 @@ class DisplaySettingsDrawer extends StatelessWidget {
             _tile(context, Icons.help_outline, 'Help', () {
               Navigator.push(context,
                   MaterialPageRoute(builder: (_) => HelpScreen()));
-            }),
-            _tile(context, Icons.star_border, 'Rate Us', () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Thanks for the love!')));
-            }),
-            _tile(context, Icons.share, 'Share App', () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Share sheet (demo)')));
             }),
           ],
         ),

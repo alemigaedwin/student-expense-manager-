@@ -38,6 +38,19 @@ function ensureDatabaseAndTables(PDO $pdo, string $sqlPath): void {
                 $pdo->exec($sql);
             }
         }
+        $prefCheck = $pdo->query("SHOW TABLES LIKE 'notification_preferences'");
+        if ($prefCheck->rowCount() > 0) {
+            $cols = $pdo->query("SHOW COLUMNS FROM notification_preferences")->fetchAll(PDO::FETCH_COLUMN);
+            if (!in_array('reminder_time', $cols, true)) {
+                $pdo->exec("ALTER TABLE notification_preferences ADD COLUMN reminder_time VARCHAR(10) NOT NULL DEFAULT '20:00'");
+            }
+            if (!in_array('carrier_gateway', $cols, true)) {
+                $pdo->exec("ALTER TABLE notification_preferences ADD COLUMN carrier_gateway VARCHAR(60) NULL");
+            }
+            if (!in_array('telegram_chat_id', $cols, true)) {
+                $pdo->exec("ALTER TABLE notification_preferences ADD COLUMN telegram_chat_id VARCHAR(50) NULL");
+            }
+        }
     } catch (Throwable $e) {
         error_log('Auto schema init notice: ' . $e->getMessage());
     }
@@ -491,10 +504,24 @@ function syncData(PDO $pdo, string $uid, array $s): void {
 }
 
 function notificationPrefs(PDO $pdo, string $uid): array {
-    $q=$pdo->prepare('SELECT phone_number,email_enabled,sms_enabled,daily_reminder_enabled,balance_alert_enabled,low_balance_threshold FROM notification_preferences WHERE user_id=?');
-    $q->execute([$uid]); $r=$q->fetch();
-    if(!$r) return ['phoneNumber'=>'','emailEnabled'=>true,'smsEnabled'=>false,'dailyReminderEnabled'=>true,'balanceAlertEnabled'=>true,'lowBalanceThreshold'=>0.0];
-    return ['phoneNumber'=>$r['phone_number']??'','emailEnabled'=>(bool)$r['email_enabled'],'smsEnabled'=>(bool)$r['sms_enabled'],'dailyReminderEnabled'=>(bool)$r['daily_reminder_enabled'],'balanceAlertEnabled'=>(bool)$r['balance_alert_enabled'],'lowBalanceThreshold'=>(float)$r['low_balance_threshold']];
+    try {
+        $q=$pdo->prepare('SELECT phone_number,email_enabled,sms_enabled,daily_reminder_enabled,balance_alert_enabled,low_balance_threshold,reminder_time,carrier_gateway,telegram_chat_id FROM notification_preferences WHERE user_id=?');
+        $q->execute([$uid]); $r=$q->fetch();
+    } catch(Throwable $e) {
+        $r = false;
+    }
+    if(!$r) return ['phoneNumber'=>'','emailEnabled'=>true,'smsEnabled'=>false,'dailyReminderEnabled'=>true,'balanceAlertEnabled'=>true,'lowBalanceThreshold'=>0.0,'reminderTime'=>'20:00','carrierGateway'=>'','telegramChatId'=>''];
+    return [
+        'phoneNumber'=>$r['phone_number']??'',
+        'emailEnabled'=>(bool)($r['email_enabled']??true),
+        'smsEnabled'=>(bool)($r['sms_enabled']??false),
+        'dailyReminderEnabled'=>(bool)($r['daily_reminder_enabled']??true),
+        'balanceAlertEnabled'=>(bool)($r['balance_alert_enabled']??true),
+        'lowBalanceThreshold'=>(float)($r['low_balance_threshold']??0),
+        'reminderTime'=>$r['reminder_time']??'20:00',
+        'carrierGateway'=>$r['carrier_gateway']??'',
+        'telegramChatId'=>$r['telegram_chat_id']??'',
+    ];
 }
 function accountSummary(PDO $pdo, string $uid): array {
     $q=$pdo->prepare("SELECT COALESCE(SUM(CASE WHEN type=0 AND is_deleted=0 THEN amount ELSE 0 END),0) income, COALESCE(SUM(CASE WHEN type=1 AND is_deleted=0 THEN amount ELSE 0 END),0) expense, COUNT(CASE WHEN is_deleted=0 THEN 1 END) transactions FROM transactions WHERE user_id=?");
@@ -527,6 +554,40 @@ try {
         if(!$u||!password_verify($password,$u['password_hash']))respond(false,'Incorrect email or password.',null,401);
         $token=issueToken($pdo,$u['id'],(int)$config['session_days']);
         respond(true,'Login successful.',['token'=>$token,'user'=>['id'=>$u['id'],'name'=>$u['full_name'],'email'=>$u['email']],'state'=>state($pdo,$u['id'])]);
+    }
+    if($action==='google_auth'){
+        $email=strtolower(trim((string)($in['email']??'')));
+        $name=trim((string)($in['name']??'Student'));
+        $googleId=trim((string)($in['google_id']??($in['googleId']??'')));
+        $idToken=trim((string)($in['id_token']??($in['idToken']??'')));
+
+        if(!filter_var($email,FILTER_VALIDATE_EMAIL)) respond(false,'Please enter a valid Google email address.',null,422);
+
+        try {
+            $pdo->exec("ALTER TABLE users MODIFY COLUMN password_hash VARCHAR(255) NULL");
+            $pdo->exec("ALTER TABLE users ADD COLUMN google_id VARCHAR(255) NULL UNIQUE AFTER email");
+        } catch (Throwable $e) {}
+
+        $q=$pdo->prepare('SELECT id,full_name,email FROM users WHERE email=? OR (google_id IS NOT NULL AND google_id=?)');
+        $q->execute([$email, $googleId !== '' ? $googleId : $email]);
+        $u=$q->fetch();
+
+        if($u){
+            if ($googleId !== '') {
+                try {
+                    $pdo->prepare('UPDATE users SET google_id=? WHERE id=?')->execute([$googleId, $u['id']]);
+                } catch (Throwable $e) {}
+            }
+        } else {
+            $uid=uuid();
+            $pdo->prepare('INSERT INTO users(id,full_name,email,google_id,password_hash) VALUES(?,?,?,?,NULL)')->execute([$uid,$name,$email,$googleId !== '' ? $googleId : null]);
+            $accountId=uuid();
+            $pdo->prepare('INSERT INTO accounts(id,user_id,name) VALUES(?,?,?)')->execute([$accountId,$uid,$name]);
+            $u=['id'=>$uid,'full_name'=>$name,'email'=>$email];
+        }
+
+        $token=issueToken($pdo,$u['id'],(int)$config['session_days']);
+        respond(true,'Google authentication successful.',['token'=>$token,'user'=>['id'=>$u['id'],'name'=>$u['full_name'],'email'=>$u['email']],'state'=>state($pdo,$u['id'])]);
     }
     if($action==='request_password_reset_code'){
         $email=strtolower(trim((string)($in['email']??'')));
@@ -633,8 +694,15 @@ try {
         $smsEnabled=!empty($p['smsEnabled']);
         if($smsEnabled && $phone==='') respond(false,'Add a phone number before enabling SMS alerts.',null,422);
         if($phone!=='' && !preg_match('/^\+[1-9][0-9]{7,14}$/',$phone)) respond(false,'Enter the phone number in international format, for example +2567XXXXXXXX.',null,422);
-        $q=$pdo->prepare('INSERT INTO notification_preferences(user_id,phone_number,email_enabled,sms_enabled,daily_reminder_enabled,balance_alert_enabled,low_balance_threshold) VALUES(?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE phone_number=VALUES(phone_number),email_enabled=VALUES(email_enabled),sms_enabled=VALUES(sms_enabled),daily_reminder_enabled=VALUES(daily_reminder_enabled),balance_alert_enabled=VALUES(balance_alert_enabled),low_balance_threshold=VALUES(low_balance_threshold)');
-        $q->execute([$uid,$phone!==''?$phone:null,!empty($p['emailEnabled'])?1:0,$smsEnabled?1:0,!empty($p['dailyReminderEnabled'])?1:0,!empty($p['balanceAlertEnabled'])?1:0,max(0,(float)($p['lowBalanceThreshold']??0))]);
+        $remTime = trim((string)($p['reminderTime'] ?? '20:00'));
+        if (!preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $remTime)) $remTime = '20:00';
+        $gateway = trim((string)($p['carrierGateway'] ?? ''));
+        $telegramId = trim((string)($p['telegramChatId'] ?? ''));
+
+        $q=$pdo->prepare('INSERT INTO notification_preferences(user_id,phone_number,email_enabled,sms_enabled,daily_reminder_enabled,balance_alert_enabled,low_balance_threshold,reminder_time,carrier_gateway,telegram_chat_id)
+                          VALUES(?,?,?,?,?,?,?,?,?,?)
+                          ON DUPLICATE KEY UPDATE phone_number=VALUES(phone_number),email_enabled=VALUES(email_enabled),sms_enabled=VALUES(sms_enabled),daily_reminder_enabled=VALUES(daily_reminder_enabled),balance_alert_enabled=VALUES(balance_alert_enabled),low_balance_threshold=VALUES(low_balance_threshold),reminder_time=VALUES(reminder_time),carrier_gateway=VALUES(carrier_gateway),telegram_chat_id=VALUES(telegram_chat_id)');
+        $q->execute([$uid,$phone!==''?$phone:null,!empty($p['emailEnabled'])?1:0,$smsEnabled?1:0,!empty($p['dailyReminderEnabled'])?1:0,!empty($p['balanceAlertEnabled'])?1:0,max(0,(float)($p['lowBalanceThreshold']??0)),$remTime,$gateway!==''?$gateway:null,$telegramId!==''?$telegramId:null]);
         respond(true,'Notification preferences saved.',notificationPrefs($pdo,$uid));
     }
     if($action==='notifications') {

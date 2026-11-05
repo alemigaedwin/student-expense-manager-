@@ -4,6 +4,7 @@ import 'package:printing/printing.dart';
 import '../../services/app_state.dart';
 import '../../services/report_service.dart';
 import '../../utils/app_colors.dart';
+import '../../services/storage_service.dart';
 import '../../utils/file_export.dart';
 import '../../utils/formatters.dart';
 
@@ -29,6 +30,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final income = app.totalIncome(txns), expense = app.totalExpense(txns);
     final categories = {for (final c in app.allCategories) c.id: c.name};
     final accounts = {for (final account in app.accounts) account.id: account.name};
+    final userProfile = {
+      'name': app.userDisplayName,
+      'email': StorageService.getSetting('auth_email') ?? '',
+      'phone': app.userSetting('profile_phone'),
+      'school': app.userSetting('profile_school'),
+      'course': app.userSetting('profile_course'),
+    };
     return Scaffold(
       appBar: AppBar(title: Text('Reports')),
       body: ListView(padding: EdgeInsets.all(18), children: [
@@ -87,12 +95,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
         SizedBox(height: 14),
         ListTile(leading: Icon(Icons.picture_as_pdf, color: AppColors.expense), title: Text('PDF report'), subtitle: Text('Preview, print or save a professional PDF report'), trailing: Icon(Icons.chevron_right), onTap: () async {
           if (start.isAfter(end)) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Choose a valid date range.'))); return; }
-          await Navigator.push(context, MaterialPageRoute(builder: (_) => _PdfPreviewPage(txns: txns, accountName: reportAccountName, categories: categories)));
+          await Navigator.push(context, MaterialPageRoute(builder: (_) => _PdfPreviewPage(txns: txns, accountName: reportAccountName, categories: categories, userProfile: userProfile)));
         }),
         ListTile(leading: Icon(Icons.table_chart, color: AppColors.income), title: Text('Excel report'), subtitle: Text('Download a .xlsx spreadsheet of the transactions'), trailing: Icon(Icons.download), onTap: () async {
           if (start.isAfter(end)) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Choose a valid date range.'))); return; }
           final bytes = ReportService.excel(
-              txns, reportAccountName, categories, accounts, app.receiptLabels);
+              txns, reportAccountName, categories, accounts, app.receiptLabels, userProfile);
           final filename =
               'student_expense_report_${start.year}${start.month.toString().padLeft(2, '0')}${start.day.toString().padLeft(2, '0')}-${end.year}${end.month.toString().padLeft(2, '0')}${end.day.toString().padLeft(2, '0')}.xlsx';
           await exportFile(bytes, filename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -107,7 +115,24 @@ class _ReportsScreenState extends State<ReportsScreen> {
 }
 
 class _PdfPreviewPage extends StatelessWidget {
-  final dynamic txns; final String accountName; final Map<String, String> categories;
-  _PdfPreviewPage({required this.txns, required this.accountName, required this.categories});
-  @override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:Text('PDF Report')),body:PdfPreview(build:(format)=>ReportService.pdf(txns, accountName, categories)));
+  final dynamic txns;
+  final String accountName;
+  final Map<String, String> categories;
+  final Map<String, String> userProfile;
+
+  _PdfPreviewPage({
+    required this.txns,
+    required this.accountName,
+    required this.categories,
+    required this.userProfile,
+  });
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: Text('PDF Report')),
+        body: PdfPreview(
+          build: (format) =>
+              ReportService.pdf(txns, accountName, categories, userProfile),
+        ),
+      );
 }

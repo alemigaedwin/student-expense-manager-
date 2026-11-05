@@ -163,6 +163,74 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  Future<bool> loginWithGoogle(String email, String name, [String? googleId, String? idToken]) async {
+    final cleanEmail = email.trim().toLowerCase();
+    final cleanName = name.trim().isEmpty ? cleanEmail.split('@').first : name.trim();
+    try {
+      final response = await BackendService.googleAuth(cleanName, cleanEmail, googleId, idToken);
+      _clearCachedUserData();
+      await _acceptBackendSession(response);
+      _authenticated = true;
+      _syncError = null;
+      notifyListeners();
+      unawaited(syncNow());
+      return true;
+    } catch (e) {
+      _authenticated = false;
+      _syncError = e.toString().replaceFirst('Exception: ', '');
+      notifyListeners();
+      return false;
+    }
+  }
+
+  void loginWithGoogleFrontEnd(String email, String name) {
+    loginWithGoogle(email, name);
+  }
+
+  void startDemoSession() {
+    _clearCachedUserData();
+    _accounts = [AccountModel(id: 'default', name: 'Income Expense')];
+    _currentAccountId = _accounts.first.id;
+    _categories = [
+      ...defaultIncomeCategories(),
+      ...defaultExpenseCategories(),
+    ];
+    _paymentMethods = defaultPaymentMethods();
+    _userDisplayName = 'Student User';
+    _authenticated = true;
+    _syncError = null;
+
+    final now = DateTime.now();
+    final foodCat = _categories.firstWhere((c) => c.name == 'Food', orElse: () => _categories.first);
+    final salaryCat = _categories.firstWhere((c) => c.name == 'Allowance' || c.name == 'Salary', orElse: () => _categories.first);
+    final cashMethod = _paymentMethods.first;
+
+    _transactions = [
+      TransactionModel(
+        id: _uuid.v4(),
+        accountId: _currentAccountId,
+        type: TransactionType.income,
+        amount: 450.0,
+        categoryId: salaryCat.id,
+        paymentMethodId: cashMethod.id,
+        notes: 'Monthly allowance / stipend',
+        date: now.subtract(const Duration(days: 2)),
+      ),
+      TransactionModel(
+        id: _uuid.v4(),
+        accountId: _currentAccountId,
+        type: TransactionType.expense,
+        amount: 25.0,
+        categoryId: foodCat.id,
+        paymentMethodId: cashMethod.id,
+        notes: 'Campus meal and snacks',
+        date: now.subtract(const Duration(hours: 3)),
+      ),
+    ];
+
+    notifyListeners();
+  }
+
   void _clearCachedUserData() {
     _transactions = [];
     _categories = [];
@@ -727,6 +795,19 @@ class AppState extends ChangeNotifier {
   }
 
   // ---------------- Budgets ----------------
+  List<BudgetModel> get budgets => _budgets;
+
+  double spentForCategory(String categoryId, BudgetPeriod period, DateTime periodStart) {
+    return _transactions
+        .where((t) =>
+            t.accountId == _currentAccountId &&
+            !t.isDeleted &&
+            t.type == TransactionType.expense &&
+            t.categoryId == categoryId &&
+            _samePeriod(t.date, periodStart, period))
+        .fold<double>(0.0, (sum, t) => sum + t.amount);
+  }
+
   List<BudgetModel> budgetsFor(BudgetPeriod period, DateTime periodStart) =>
       _budgets
           .where((b) =>

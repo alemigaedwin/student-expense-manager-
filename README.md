@@ -4,6 +4,47 @@ A complete, cross-platform Flutter application and PHP/MySQL backend for student
 
 ---
 
+## 🌐 Live Web Demo on GitHub Pages
+
+You can access and interact with the live system directly in your web browser:
+
+👉 **[Launch Student Expense Manager Live Web App](https://alemigaedwin.github.io/student-expense-manager-/)**
+
+> **Quick Interactive Preview**: When the app opens, click **"Explore Live Demo (Guest Mode)"** to immediately interact with the full dashboard, charts, transactions, budget tracking, and calendar with sample student data!
+> You can also connect to your live MySQL backend by tapping the **Server: ...** button at the bottom of the Login screen.
+
+---
+
+## 🚀 How to Publish / Push to Your GitHub Repository
+
+To push this codebase to your repository `https://github.com/alemigaedwin/student-expense-manager-.git` and activate the live link:
+
+### Step 1: Push Code to GitHub
+Open your terminal in `c:\xampp\htdocs\student_expense_manager_backend` (or the Terminal tab in Android Studio) and run:
+
+```bash
+git init
+git remote add origin https://github.com/alemigaedwin/student-expense-manager-.git
+git branch -M main
+git add .
+git commit -m "Deploy Student Expense Manager with GitHub Pages"
+git push -u origin main --force
+```
+
+### Step 2: Enable GitHub Pages (Takes 30 Seconds)
+1. Open your repository in your browser:
+   [https://github.com/alemigaedwin/student-expense-manager-](https://github.com/alemigaedwin/student-expense-manager-)
+2. Click on **Settings** (top menu bar of your repository).
+3. In the left sidebar, click on **Pages**.
+4. Under **Build and deployment** > **Source**:
+   * Select **GitHub Actions**.
+5. Go to the **Actions** tab on your repository:
+   * You will see the **"Deploy to GitHub Pages"** workflow running automatically.
+   * Once it completes (green checkmark), your app is officially live at:
+     **`https://alemigaedwin.github.io/student-expense-manager-/`**
+
+---
+
 ## 📱 Device Compatibility & Universal Installation
 
 The project has been configured to build and install on **any smartphone**:
@@ -14,7 +55,7 @@ The project has been configured to build and install on **any smartphone**:
 
 ---
 
-## 🚀 How to Run and Install from Android Studio
+## 📲 How to Run and Install from Android Studio
 
 ### Method 1: Run directly on your phone via USB
 1. On your phone:
@@ -71,4 +112,4 @@ To have your backend live on the internet so your app works anywhere:
    * Update `config.php` with your Alwaysdata MySQL credentials.
 4. Your live API URL will be:
    `https://YOUR_ACCOUNT.alwaysdata.net/api.php`
-5. On your phone, open the app, tap **Server: ...** at the bottom of the Login screen, paste your live URL, tap **Test Connection**, and tap **Save**!
+5. On your phone or the web app, tap **Server: ...** at the bottom of the Login screen, paste your live URL, tap **Test Connection**, and tap **Save**!

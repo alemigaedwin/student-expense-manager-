@@ -742,28 +742,33 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     if (!mounted) return;
     if (!saved) {
       setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Could not save this transaction to your account. ${app.syncError ?? 'Check your connection and try again.'}',
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              'Could not save this transaction to your account. ${app.syncError ?? 'Check your connection and try again.'}',
+            ),
+            duration: const Duration(seconds: 3),
           ),
-          duration: const Duration(seconds: 6),
-        ),
-      );
+        );
       return;
     }
     _savedOk = true;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          widget.existing != null
-              ? 'Transaction updated successfully.'
-              : isIncome
-                  ? 'Income added successfully.'
-                  : 'Expense added successfully.',
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.existing != null
+                ? 'Transaction updated successfully.'
+                : isIncome
+                    ? 'Income added successfully.'
+                    : 'Expense added successfully.',
+          ),
+          duration: const Duration(seconds: 3),
         ),
-      ),
-    );
+      );
     Navigator.pop(context);
   }
 }

@@ -227,17 +227,25 @@ class _TransferScreenState extends State<TransferScreen> {
     if (!mounted) return;
     if (!saved) {
       setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              'Could not save the transfer to your account. Check the server connection.'),
-        ),
-      );
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+                'Could not save the transfer to your account. Check the server connection.'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Transfer recorded successfully.')),
-    );
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('Transfer recorded successfully.'),
+          duration: Duration(seconds: 3),
+        ),
+      );
     Navigator.pop(context);
   }
 }

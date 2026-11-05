@@ -161,17 +161,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             trailing: Icon(Icons.refresh, color: AppColors.accent, size: 22),
             onTap: app.isSyncing ? null : app.syncNow,
           ),
-          ListTile(
-            leading: Icon(Icons.dns_outlined, color: AppColors.accent, size: 24),
-            title: Text('Backend Server URL',
-                style: TextStyle(color: AppColors.textPrimary)),
-            subtitle: Text(
-              BackendService.baseUrl,
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-            ),
-            trailing: Icon(Icons.edit, color: AppColors.accent, size: 18),
-            onTap: _editServerUrl,
-          ),
           _sectionLabel('About'),
           ListTile(
             title: Text('Student Expense Manager',
