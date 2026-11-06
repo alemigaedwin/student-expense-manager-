@@ -15,9 +15,6 @@ dependencies:
   provider: ^6.1.2
   http: ^1.2.2
 
-  # Remote database (via PHP backend on Hostinger)
-  sqlbase: ^0.1.0
-
   # Local storage (works on Web via IndexedDB and on Android/iOS)
   hive: ^2.2.3
   hive_flutter: ^1.1.0

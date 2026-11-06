@@ -38,7 +38,7 @@ jobs:
         run: flutter pub get
 
       - name: Build Android Release APK
-        run: flutter build apk --release --no-tree-shake-icons --android-skip-build-dependency-validation
+        run: flutter build apk --release --no-tree-shake-icons
 
       - name: Prepare APK Asset
         run: |
