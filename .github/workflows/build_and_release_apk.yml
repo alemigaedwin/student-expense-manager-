@@ -22,7 +22,7 @@ jobs:
       - name: Set up Java Development Kit (JDK 17)
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: 'zulu'
           java-version: '17'
 
       - name: Set up Flutter
@@ -30,6 +30,9 @@ jobs:
         with:
           channel: 'stable'
           cache: true
+
+      - name: Accept Android SDK Licenses
+        run: yes | flutter doctor --android-licenses || true
 
       - name: Install Dependencies
         run: flutter pub get
@@ -41,38 +44,42 @@ jobs:
         run: |
           cp build/app/outputs/flutter-apk/app-release.apk app-release.apk
 
+      - name: Upload APK as Workflow Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: student-expense-manager-apk
+          path: app-release.apk
+          if-no-files-found: error
+
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v1.0.0' }}
-          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'Student Expense Manager v1.0.0 (Universal Release)' }}
+          tag_name: 'v1.0.0'
+          name: 'Student Expense Manager v1.0.0 (Release APK)'
           draft: false
           prerelease: false
           make_latest: true
-          overwrite_files: true
           body: |
-            ## 📱 Student Expense Manager — Multi-Platform Release
+            ## 📱 Student Expense Manager — Android Release
 
-            ### 🤖 For Android Phones (Direct APK Install)
+            ### 🚀 Direct Download & Install APK:
             👉 **[Download app-release.apk](https://github.com/alemigaedwin/student-expense-manager-/releases/download/v1.0.0/app-release.apk)**
-            - Tap the download link on your phone.
-            - Open the file and tap **Install** (Allow *"Install unknown apps"* if prompted).
-            - Enjoy 100% offline access with automatic in-app updates!
 
             ---
 
-            ### 🍎 For iPhones (iOS) & 💻 Windows / Mac
-            👉 **[Open Live Web & PWA App](https://alemigaedwin.github.io/student-expense-manager-/)**
-            - **iPhone**: Open in Safari, tap the **Share** button, and tap **"Add to Home Screen"** to install as a native offline app.
-            - **Windows / Mac / PC**: Open in Chrome or Edge, click the **"Install App"** icon in the URL bar to install as an offline desktop application.
+            ### ✨ Real Features
+            - 📴 **100% Offline Mode**: All transactions, budgets, notes, and reminders are stored locally on your phone.
+            - 🔄 **In-App Auto-Updates**: The app checks GitHub Releases for new updates automatically.
+            - 💰 **Student Finances**: Full tracking for cash, cards, bank accounts, and budgets.
+            - 📝 **Student Notebook**: Real notes and bill reminders.
 
             ---
 
-            ### ✨ Key Highlights
-            - 📴 **100% Offline Mode**: Data is saved directly on your phone/device.
-            - 🔄 **Automatic Updates**: App notifies you and updates directly from GitHub.
-            - 💰 **Complete Financial Tools**: Expenses, income, budgets, notebook, reminders, and charts.
+            ### 📲 How to Install:
+            1. Tap the download link above on your Android phone.
+            2. Tap **Install** (Allow *"Install unknown apps"* if prompted).
+            3. Open the app, create your account or sign in, and enjoy offline expense tracking!
           files: |
             app-release.apk

@@ -38,7 +38,7 @@ android {
 
     defaultConfig {
         applicationId "com.example.student_expense_manager"
-        minSdkVersion flutter.minSdkVersion
+        minSdkVersion 21
         targetSdk = flutter.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName

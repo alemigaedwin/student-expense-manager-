@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../services/app_state.dart';
 import '../../services/backend_service.dart';
 import '../../utils/app_colors.dart';
@@ -357,42 +356,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
                         ),
-                        const SizedBox(height: 10),
-
-                        // Offline Mode Button
-                        OutlinedButton.icon(
-                          onPressed: () {
-                            context.read<AppState>().startOfflineMode();
-                          },
-                          icon: const Icon(Icons.offline_pin, color: Colors.green),
-                          label: const Text(
-                            'Continue in Offline Mode (No Internet)',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size.fromHeight(46),
-                            side: BorderSide(color: Colors.green.shade600, width: 1.5),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-
-                        // Download APK Button (Direct GitHub link)
-                        TextButton.icon(
-                          onPressed: () async {
-                            final uri = Uri.parse(
-                                'https://github.com/alemigaedwin/student-expense-manager-/releases/latest/download/app-release.apk');
-                            if (await canLaunchUrl(uri)) {
-                              await launchUrl(uri, mode: LaunchMode.externalApplication);
-                            }
-                          },
-                          icon: const Icon(Icons.android, size: 18),
-                          label: const Text(
-                            'Download Android APK from GitHub',
-                            style: TextStyle(fontSize: 12, decoration: TextDecoration.underline),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 18),
 
                         // Register Link
                         Row(

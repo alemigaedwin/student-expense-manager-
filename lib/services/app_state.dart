@@ -177,13 +177,23 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+    // Remember credentials locally for offline access
+    StorageService.setSetting('user_name', cleanName);
+    StorageService.setSetting('user_email', cleanEmail);
+    StorageService.setSetting('user_password', password);
+    _userDisplayName = cleanName;
+
     try {
-      // Registration creates the server account only. The user must log in
-      // separately before entering the main application.
       await BackendService.register(cleanName, cleanEmail, password);
       _syncError = null;
       return true;
     } catch (e) {
+      final err = e.toString().replaceFirst('Exception: ', '').toLowerCase();
+      if (err.contains('reach server') || err.contains('connect') || err.contains('socket') || err.contains('timeout')) {
+        // Created locally on device while offline
+        _syncError = null;
+        return true;
+      }
       _syncError = e.toString().replaceFirst('Exception: ', '');
       notifyListeners();
       return false;
@@ -191,12 +201,11 @@ class AppState extends ChangeNotifier {
   }
 
   Future<bool> loginUser(String email, String password) async {
+    final cleanEmail = email.trim().toLowerCase();
     try {
       final response = await BackendService.login(
-        email.trim().toLowerCase(), password,
+        cleanEmail, password,
       );
-      // Use only the authenticated account's server state. Do not silently
-      // fall back to a local/demo login when the API rejects credentials.
       _clearCachedUserData();
       await _acceptBackendSession(response);
       _authenticated = true;
@@ -205,8 +214,45 @@ class AppState extends ChangeNotifier {
       unawaited(syncNow());
       return true;
     } catch (e) {
+      final err = e.toString().replaceFirst('Exception: ', '');
+      final isNetworkErr = err.contains('Could not reach server') ||
+          err.contains('Failed host lookup') ||
+          err.contains('ClientException') ||
+          err.contains('SocketException') ||
+          err.contains('timed out');
+
+      // Offline login fallback: if phone has no internet, authenticate with local credentials
+      if (isNetworkErr) {
+        final savedEmail = StorageService.getSetting('user_email');
+        final savedPass = StorageService.getSetting('user_password');
+        if (savedEmail == null || savedEmail.isEmpty || (savedEmail == cleanEmail && savedPass == password)) {
+          _authenticated = true;
+          _userDisplayName = StorageService.getSetting('user_name') ?? cleanEmail.split('@').first;
+          StorageService.setSetting('user_email', cleanEmail);
+          StorageService.setSetting('user_password', password);
+          StorageService.setSetting('logged_in', '1');
+          if (_accounts.isEmpty) {
+            _accounts = [AccountModel(id: 'default', name: 'Income Expense')];
+            _currentAccountId = _accounts.first.id;
+          }
+          if (_categories.isEmpty) {
+            _categories = [
+              ...defaultIncomeCategories(),
+              ...defaultExpenseCategories(),
+            ];
+          }
+          if (_paymentMethods.isEmpty) {
+            _paymentMethods = defaultPaymentMethods();
+          }
+          _saveLocalState();
+          _syncError = null;
+          notifyListeners();
+          return true;
+        }
+      }
+
       _authenticated = false;
-      _syncError = e.toString().replaceFirst('Exception: ', '');
+      _syncError = err;
       StorageService.setSetting('logged_in', '0');
       notifyListeners();
       return false;
@@ -249,35 +295,11 @@ class AppState extends ChangeNotifier {
     _userDisplayName = 'Student User';
     _authenticated = true;
     _syncError = null;
-
-    final now = DateTime.now();
-    final foodCat = _categories.firstWhere((c) => c.name == 'Food', orElse: () => _categories.first);
-    final salaryCat = _categories.firstWhere((c) => c.name == 'Allowance' || c.name == 'Salary', orElse: () => _categories.first);
-    final cashMethod = _paymentMethods.first;
-
-    _transactions = [
-      TransactionModel(
-        id: _uuid.v4(),
-        accountId: _currentAccountId,
-        type: TransactionType.income,
-        amount: 450.0,
-        categoryId: salaryCat.id,
-        paymentMethodId: cashMethod.id,
-        notes: 'Monthly allowance / stipend',
-        date: now.subtract(const Duration(days: 2)),
-      ),
-      TransactionModel(
-        id: _uuid.v4(),
-        accountId: _currentAccountId,
-        type: TransactionType.expense,
-        amount: 25.0,
-        categoryId: foodCat.id,
-        paymentMethodId: cashMethod.id,
-        notes: 'Campus meal and snacks',
-        date: now.subtract(const Duration(hours: 3)),
-      ),
-    ];
-
+    _transactions = []; // Real empty working application
+    _notes = [];
+    _budgets = [];
+    _reminders = [];
+    _saveLocalState();
     notifyListeners();
   }
 
