@@ -25,7 +25,6 @@ if (flutterVersionName == null) {
 android {
     namespace "com.example.student_expense_manager"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -43,15 +42,11 @@ android {
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
         multiDexEnabled true
-        ndk {
-            abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
-        }
     }
 
     buildTypes {
         release {
-            // Using debug signing so `flutter run --release` works out of the box.
-            // Replace with your own signing config before publishing.
+            // Using debug signing so release APK works out of the box
             signingConfig signingConfigs.debug
         }
     }
