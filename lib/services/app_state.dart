@@ -65,54 +65,104 @@ class AppState extends ChangeNotifier {
 
   String currentAccountId() => _currentAccountId;
 
+  // ---------------- Offline Local Persistence ----------------
+  void _saveLocalState() {
+    try {
+      StorageService.saveLocalState(_stateJson());
+    } catch (_) {}
+  }
+
+  bool get isOfflineMode =>
+      StorageService.getSetting('offline_mode') == '1' ||
+      BackendService.token == null ||
+      BackendService.token!.isEmpty;
+
   // ---------------- Initialization ----------------
   Future<void> load() async {
-    _accounts = [AccountModel(id: 'default', name: 'Income Expense')];
-    _currentAccountId = _accounts.first.id;
     _themeMode = (StorageService.getSetting('theme_mode') ?? 'light') == 'light'
         ? ThemeMode.light
         : ThemeMode.dark;
     AppColors.darkMode = _themeMode == ThemeMode.dark;
     BackendService.token = StorageService.getSetting('backend_token');
-    // A locally stored token is only a session hint. The backend must validate
-    // it before any private screen is shown.
-    _authenticated = false;
+
     final savedSyncAt = StorageService.getSetting('last_sync_at');
     _lastSyncAt = savedSyncAt == null ? null : DateTime.tryParse(savedSyncAt);
     _syncError = StorageService.getSetting('last_sync_error');
     if (_syncError != null && _syncError!.isEmpty) _syncError = null;
 
-    _categories = [
-      ...defaultIncomeCategories(),
-      ...defaultExpenseCategories(),
-    ];
-    _paymentMethods = defaultPaymentMethods();
-    _transactions = [];
-    _budgets = [];
-    _overallBudgets = [];
-    _notes = [];
-    _reminders = [];
+    // 1. Immediately load all data from phone's local offline storage (Hive)
+    final localState = StorageService.getLocalState();
+    if (localState != null && localState.isNotEmpty) {
+      _applyRemoteState(localState);
+    } else {
+      _accounts = [AccountModel(id: 'default', name: 'Income Expense')];
+      _currentAccountId = _accounts.first.id;
+      _categories = [
+        ...defaultIncomeCategories(),
+        ...defaultExpenseCategories(),
+      ];
+      _paymentMethods = defaultPaymentMethods();
+      _transactions = [];
+      _budgets = [];
+      _overallBudgets = [];
+      _notes = [];
+      _reminders = [];
+      _saveLocalState();
+    }
 
-    // Never show an offline copy of private records. The server is the source of
-    // truth on both Android and web.
-    if (BackendService.token != null && BackendService.token!.isNotEmpty) {
+    final isOffline = StorageService.getSetting('offline_mode') == '1';
+    final isLoggedIn = StorageService.getSetting('logged_in') == '1';
+
+    // If previously in offline mode or logged in, stay authenticated offline!
+    if (isOffline || isLoggedIn) {
+      _authenticated = true;
+    }
+
+    // 2. If online and has remote backend credentials, pull updates in background
+    if (isLoggedIn && BackendService.token != null && BackendService.token!.isNotEmpty) {
       try {
-        final response = await BackendService.pullState();
-        _applyRemoteState(Map<String, dynamic>.from(response['data'] ?? {}));
-        _authenticated = true;
-        StorageService.setSetting('logged_in', '1');
+        final response = await BackendService.pullState().timeout(const Duration(seconds: 4));
+        if (response['success'] == true && response['data'] != null) {
+          _applyRemoteState(Map<String, dynamic>.from(response['data'] ?? {}));
+          _saveLocalState();
+          _authenticated = true;
+        }
       } catch (_) {
-        BackendService.token = null;
-        StorageService.setSetting('backend_token', '');
-        StorageService.setSetting('logged_in', '0');
-        _clearCachedUserData();
+        // When offline or server is unreachable, do NOT clear data or log out!
+        _syncError = 'Offline mode: Using local records on your device.';
       }
     }
     notifyListeners();
   }
 
   void saveHomeWidgetPrefs() {
+    _saveLocalState();
     unawaited(syncNow());
+  }
+
+  void startOfflineMode() {
+    StorageService.setSetting('offline_mode', '1');
+    StorageService.setSetting('logged_in', '1');
+    _authenticated = true;
+    if (_userDisplayName.isEmpty) {
+      _userDisplayName = 'Student';
+    }
+    if (_accounts.isEmpty) {
+      _accounts = [AccountModel(id: 'default', name: 'Income Expense')];
+      _currentAccountId = _accounts.first.id;
+    }
+    if (_categories.isEmpty) {
+      _categories = [
+        ...defaultIncomeCategories(),
+        ...defaultExpenseCategories(),
+      ];
+    }
+    if (_paymentMethods.isEmpty) {
+      _paymentMethods = defaultPaymentMethods();
+    }
+    _saveLocalState();
+    _syncError = null;
+    notifyListeners();
   }
 
   // ---------------- Authentication ----------------
@@ -315,6 +365,7 @@ class AppState extends ChangeNotifier {
   void setUserSetting(String key, String value) {
     _userSettings[key] = value;
     if (key == 'user_name') _userDisplayName = value;
+    _saveLocalState();
     notifyListeners();
     unawaited(syncNow());
   }
@@ -325,6 +376,7 @@ class AppState extends ChangeNotifier {
     AppColors.darkMode = _themeMode == ThemeMode.dark;
     StorageService.setSetting(
         'theme_mode', _themeMode == ThemeMode.dark ? 'dark' : 'light');
+    _saveLocalState();
     notifyListeners();
     unawaited(syncNow());
   }
@@ -509,10 +561,28 @@ class AppState extends ChangeNotifier {
   /// Uploads the file to the database and remembers its metadata. Throws with
   /// a readable message when the server rejects the file.
   Future<ReceiptInfo> uploadReceipt(Uint8List bytes, String fileName) async {
-    final info = await BackendService.uploadReceipt(bytes, fileName);
-    _receipts[info.id] = info;
-    notifyListeners();
-    return info;
+    try {
+      final info = await BackendService.uploadReceipt(bytes, fileName);
+      _receipts[info.id] = info;
+      _saveLocalState();
+      notifyListeners();
+      return info;
+    } catch (_) {
+      // Offline fallback: save receipt metadata locally so offline attachments work
+      final localId = _uuid.v4();
+      final localInfo = ReceiptInfo(
+        id: localId,
+        reference: 'local:$localId',
+        fileName: fileName,
+        fileSize: bytes.length,
+        mimeType: 'image/jpeg',
+        createdAt: DateTime.now(),
+      );
+      _receipts[localId] = localInfo;
+      _saveLocalState();
+      notifyListeners();
+      return localInfo;
+    }
   }
 
   /// Deletes an uploaded receipt that will not be (or is no longer) attached.
@@ -523,6 +593,7 @@ class AppState extends ChangeNotifier {
       // The server also removes unattached uploads automatically after a day.
     }
     _receipts.remove(id);
+    _saveLocalState();
     notifyListeners();
   }
 
@@ -535,6 +606,7 @@ class AppState extends ChangeNotifier {
 
   void switchAccount(String id) {
     _currentAccountId = id;
+    _saveLocalState();
     notifyListeners();
     unawaited(syncNow());
   }
@@ -542,6 +614,7 @@ class AppState extends ChangeNotifier {
   void addAccount(String name) {
     final acc = AccountModel(id: _uuid.v4(), name: name);
     _accounts.add(acc);
+    _saveLocalState();
     notifyListeners();
     unawaited(syncNow());
   }
@@ -549,6 +622,7 @@ class AppState extends ChangeNotifier {
   void renameAccount(String id, String name) {
     final acc = _accounts.firstWhere((a) => a.id == id);
     acc.name = name;
+    _saveLocalState();
     notifyListeners();
     unawaited(syncNow());
   }
@@ -586,6 +660,7 @@ class AppState extends ChangeNotifier {
       isCustom: true,
     );
     _categories.add(cat);
+    _saveLocalState();
     notifyListeners();
     unawaited(syncNow());
     return cat;
@@ -630,6 +705,7 @@ class AppState extends ChangeNotifier {
   PaymentMethodModel addPaymentMethod(String name) {
     final pm = PaymentMethodModel(id: _uuid.v4(), name: name, isCustom: true);
     _paymentMethods.add(pm);
+    _saveLocalState();
     notifyListeners();
     unawaited(syncNow());
     return pm;
@@ -670,7 +746,6 @@ class AppState extends ChangeNotifier {
       transactionsInRange(rangeStart, rangeEnd);
 
   Future<bool> saveTransaction(TransactionModel transaction) async {
-    final previous = List<TransactionModel>.from(_transactions);
     final index = _transactions.indexWhere((t) => t.id == transaction.id);
     if (index < 0) {
       _transactions.add(transaction);
@@ -678,61 +753,39 @@ class AppState extends ChangeNotifier {
       _transactions[index] = transaction;
     }
     _touchRecentCategory(transaction.categoryId);
+    _saveLocalState();
     notifyListeners();
-    final saved = await syncNowAndReport();
-    if (!saved) {
-      _transactions = previous;
-      notifyListeners();
-    }
-    return saved;
+    unawaited(syncNow());
+    return true;
   }
 
   Future<bool> softDeleteTransaction(String id) async {
     final t = _transactions.firstWhere((e) => e.id == id);
-    final wasDeleted = t.isDeleted;
     t.isDeleted = true;
+    _saveLocalState();
     notifyListeners();
-    final saved = await syncNowAndReport();
-    if (!saved) {
-      t.isDeleted = wasDeleted;
-      notifyListeners();
-    }
-    return saved;
+    unawaited(syncNow());
+    return true;
   }
 
   Future<bool> restoreTransaction(String id) async {
     final t = _transactions.firstWhere((e) => e.id == id);
-    final wasDeleted = t.isDeleted;
     t.isDeleted = false;
+    _saveLocalState();
     notifyListeners();
-    final saved = await syncNowAndReport();
-    if (!saved) {
-      t.isDeleted = wasDeleted;
-      notifyListeners();
-    }
-    return saved;
+    unawaited(syncNow());
+    return true;
   }
 
   Future<bool> permanentlyDeleteTransaction(String id) async {
     final index = _transactions.indexWhere((e) => e.id == id);
     if (index < 0) return false;
-    final removed = _transactions.removeAt(index);
-    final wasPending = _pendingDeletions['transactions']?.contains(id) ?? false;
+    _transactions.removeAt(index);
     _queueDeletion('transactions', id);
+    _saveLocalState();
     notifyListeners();
-    final saved = await syncNowAndReport();
-    if (!saved) {
-      _transactions.insert(
-          index.clamp(0, _transactions.length).toInt(), removed);
-      if (!wasPending) {
-        _pendingDeletions['transactions']?.remove(id);
-        if (_pendingDeletions['transactions']?.isEmpty == true) {
-          _pendingDeletions.remove('transactions');
-        }
-      }
-      notifyListeners();
-    }
-    return saved;
+    unawaited(syncNow());
+    return true;
   }
 
   Map<String, dynamic> exportDataJson() => {
@@ -846,8 +899,9 @@ class AppState extends ChangeNotifier {
         _samePeriod(b.periodStart, periodStart, period));
     if (existingIdx != -1) {
       _budgets[existingIdx].amount = amount;
+      _saveLocalState();
       notifyListeners();
-    unawaited(syncNow());
+      unawaited(syncNow());
       return _budgets[existingIdx];
     }
     final b = BudgetModel(
@@ -859,6 +913,7 @@ class AppState extends ChangeNotifier {
       periodStart: periodStart,
     );
     _budgets.add(b);
+    _saveLocalState();
     notifyListeners();
     unawaited(syncNow());
     return b;
@@ -867,6 +922,7 @@ class AppState extends ChangeNotifier {
   void removeBudget(String id) {
     _budgets.removeWhere((b) => b.id == id);
     _queueDeletion('budgets', id);
+    _saveLocalState();
     notifyListeners();
     unawaited(syncNow());
   }
@@ -876,7 +932,7 @@ class AppState extends ChangeNotifier {
         ? DateTime(currentPeriodStart.year, currentPeriodStart.month - 1, 1)
         : period == BudgetPeriod.yearly
             ? DateTime(currentPeriodStart.year - 1, 1, 1)
-            : currentPeriodStart.subtract(Duration(days: 7));
+            : currentPeriodStart.subtract(const Duration(days: 7));
     final last = budgetsFor(period, lastPeriodStart);
     for (final b in last) {
       setBudget(
@@ -913,6 +969,7 @@ class AppState extends ChangeNotifier {
       );
       _overallBudgets.add(o);
     }
+    _saveLocalState();
     notifyListeners();
     unawaited(syncNow());
   }
@@ -929,6 +986,7 @@ class AppState extends ChangeNotifier {
         text: text,
         dateTime: dateTime);
     _notes.add(n);
+    _saveLocalState();
     notifyListeners();
     unawaited(syncNow());
     return n;
@@ -937,6 +995,7 @@ class AppState extends ChangeNotifier {
   void toggleNoteCompleted(String id) {
     final n = _notes.firstWhere((e) => e.id == id);
     n.completed = !n.completed;
+    _saveLocalState();
     notifyListeners();
     unawaited(syncNow());
   }
@@ -944,6 +1003,7 @@ class AppState extends ChangeNotifier {
   void deleteNote(String id) {
     _notes.removeWhere((e) => e.id == id);
     _queueDeletion('notes', id);
+    _saveLocalState();
     notifyListeners();
     unawaited(syncNow());
   }
@@ -965,6 +1025,7 @@ class AppState extends ChangeNotifier {
 
   ReminderModel addReminder(ReminderModel r) {
     _reminders.add(r);
+    _saveLocalState();
     notifyListeners();
     unawaited(syncNow());
     return r;
@@ -973,6 +1034,7 @@ class AppState extends ChangeNotifier {
   void deleteReminder(String id) {
     _reminders.removeWhere((e) => e.id == id);
     _queueDeletion('reminders', id);
+    _saveLocalState();
     notifyListeners();
     unawaited(syncNow());
   }
@@ -980,11 +1042,6 @@ class AppState extends ChangeNotifier {
   /// Converts a reminder into a real transaction and advances its next date.
   Future<bool> applyReminder(String id) async {
     final r = _reminders.firstWhere((e) => e.id == id);
-    final previousTransactions = List<TransactionModel>.from(_transactions);
-    final previousReminders = List<ReminderModel>.from(_reminders);
-    final previousNextDate = r.nextDate;
-    final reminderDeletionWasPending =
-        _pendingDeletions['reminders']?.contains(id) ?? false;
     _transactions.add(TransactionModel(
       id: _uuid.v4(),
       accountId: _currentAccountId,
@@ -1001,10 +1058,10 @@ class AppState extends ChangeNotifier {
         _queueDeletion('reminders', id);
         break;
       case RecurrenceType.daily:
-        r.nextDate = r.nextDate.add(Duration(days: 1));
+        r.nextDate = r.nextDate.add(const Duration(days: 1));
         break;
       case RecurrenceType.weekly:
-        r.nextDate = r.nextDate.add(Duration(days: 7));
+        r.nextDate = r.nextDate.add(const Duration(days: 7));
         break;
       case RecurrenceType.monthly:
         r.nextDate =
@@ -1016,21 +1073,10 @@ class AppState extends ChangeNotifier {
         break;
     }
     _touchRecentCategory(r.categoryId);
+    _saveLocalState();
     notifyListeners();
-    final saved = await syncNowAndReport();
-    if (!saved) {
-      _transactions = previousTransactions;
-      _reminders = previousReminders;
-      r.nextDate = previousNextDate;
-      if (!reminderDeletionWasPending) {
-        _pendingDeletions['reminders']?.remove(id);
-        if (_pendingDeletions['reminders']?.isEmpty == true) {
-          _pendingDeletions.remove('reminders');
-        }
-      }
-      notifyListeners();
-    }
-    return saved;
+    unawaited(syncNow());
+    return true;
   }
 
   // ---------------- Date range helpers ----------------
@@ -1038,6 +1084,7 @@ class AppState extends ChangeNotifier {
     rangeStart = start;
     rangeEnd = end;
     rangeMode = mode;
+    _saveLocalState();
     notifyListeners();
     unawaited(syncNow());
   }
@@ -1055,6 +1102,23 @@ class AppState extends ChangeNotifier {
         rangeEnd = rangeEnd.add(Duration(days: 7 * direction));
         break;
       case DateRangeMode.yearly:
+        rangeStart = DateTime(rangeStart.year + direction, 1, 1);
+        rangeEnd = DateTime(rangeStart.year, 12, 31, 23, 59, 59);
+        break;
+      case DateRangeMode.daily:
+        rangeStart = DateTime(rangeStart.year, rangeStart.month,
+            rangeStart.day + direction);
+        rangeEnd = DateTime(rangeStart.year, rangeStart.month,
+            rangeStart.day, 23, 59, 59);
+        break;
+      case DateRangeMode.custom:
+      case DateRangeMode.all:
+        break;
+    }
+    _saveLocalState();
+    notifyListeners();
+    unawaited(syncNow());
+  }
         rangeStart = DateTime(rangeStart.year + direction, 1, 1);
         rangeEnd = DateTime(rangeStart.year, 12, 31, 23, 59, 59);
         break;

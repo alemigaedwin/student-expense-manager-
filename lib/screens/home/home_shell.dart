@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/app_state.dart';
+import '../../services/update_service.dart';
 import '../../utils/app_colors.dart';
 import '../../widgets/app_logo.dart';
 import '../account/account_screen.dart';
@@ -26,6 +27,9 @@ class _HomeShellState extends State<HomeShell>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      UpdateService.checkOnStartup(context);
+    });
   }
 
   @override
@@ -59,6 +63,25 @@ class _HomeShellState extends State<HomeShell>
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w600)),
               ),
+              if (app.isOfflineMode) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.green.withOpacity(0.3)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.offline_pin, size: 11, color: Colors.green),
+                      SizedBox(width: 3),
+                      Text('Offline', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green)),
+                    ],
+                  ),
+                ),
+              ],
               Icon(Icons.arrow_drop_down, color: AppColors.textPrimary),
             ],
           ),

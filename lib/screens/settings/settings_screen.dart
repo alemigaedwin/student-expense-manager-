@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/app_state.dart';
 import '../../services/backend_service.dart';
+import '../../services/update_service.dart';
 import '../../utils/app_colors.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -143,29 +145,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
               app.notifyListeners();
             },
           ),
-          _sectionLabel('Cloud Synchronization'),
+          _sectionLabel('Storage & Cloud Synchronization'),
           ListTile(
             leading: Icon(
-              app.isSyncing ? Icons.sync : (app.syncError == null ? Icons.cloud_done : Icons.cloud_off),
-              color: app.syncError == null ? AppColors.accent : AppColors.expense,
-              size: 24,
+              app.isOfflineMode ? Icons.offline_pin : (app.isSyncing ? Icons.sync : Icons.cloud_done),
+              color: app.isOfflineMode ? Colors.green : AppColors.accent,
+              size: 26,
             ),
-            title: Text(app.isSyncing ? 'Synchronizing…' : (app.syncError == null ? 'Sync your data' : 'Synchronization needs attention'),
-                style: TextStyle(color: AppColors.textPrimary)),
+            title: Text(
+              app.isOfflineMode ? 'Offline Local Storage (Active)' : 'Cloud Synchronized',
+              style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600),
+            ),
             subtitle: Text(
-              app.syncError ?? (app.lastSyncAt == null
-                  ? 'Your records are stored in your account database. Connect to the server to save changes.'
-                  : 'Last successful sync: ${app.lastSyncAt!.toLocal()}'),
-              style: TextStyle(color: app.syncError == null ? AppColors.textSecondary : AppColors.expense),
+              app.isOfflineMode
+                  ? 'All data, budgets, transactions, and notes are stored locally on this phone.'
+                  : (app.syncError ?? (app.lastSyncAt == null ? 'Connected to cloud server.' : 'Last synced: ${app.lastSyncAt!.toLocal()}')),
+              style: TextStyle(color: AppColors.textSecondary),
             ),
-            trailing: Icon(Icons.refresh, color: AppColors.accent, size: 22),
-            onTap: app.isSyncing ? null : app.syncNow,
+            trailing: app.isOfflineMode
+                ? OutlinedButton(
+                    onPressed: _editServerUrl,
+                    child: const Text('Connect Server'),
+                  )
+                : IconButton(
+                    icon: const Icon(Icons.refresh, color: AppColors.accent),
+                    onPressed: app.isSyncing ? null : app.syncNow,
+                  ),
+          ),
+          _sectionLabel('Updates & GitHub Release'),
+          ListTile(
+            leading: const Icon(Icons.system_update_alt, color: AppColors.accent),
+            title: Text('Check for GitHub Updates', style: TextStyle(color: AppColors.textPrimary)),
+            subtitle: Text(
+              'Installed: v${UpdateService.currentVersion} • Automatically check releases',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+            onTap: () => UpdateService.manualCheck(context),
+          ),
+          ListTile(
+            leading: const Icon(Icons.download_for_offline_outlined, color: Colors.green),
+            title: Text('Download Latest APK (GitHub)', style: TextStyle(color: AppColors.textPrimary)),
+            subtitle: Text(
+              'Direct download link to install app-release.apk',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+            trailing: const Icon(Icons.open_in_new, size: 16),
+            onTap: () async {
+              final uri = Uri.parse(UpdateService.defaultApkUrl);
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+            },
           ),
           _sectionLabel('About'),
           ListTile(
             title: Text('Student Expense Manager',
                 style: TextStyle(color: AppColors.textPrimary)),
-            subtitle: Text('Version 1.0.0',
+            subtitle: Text('Version ${UpdateService.currentVersion} • Offline First',
                 style: TextStyle(color: AppColors.textSecondary)),
           ),
         ],
