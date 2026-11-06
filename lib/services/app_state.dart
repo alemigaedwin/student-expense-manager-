@@ -572,11 +572,9 @@ class AppState extends ChangeNotifier {
       final localId = _uuid.v4();
       final localInfo = ReceiptInfo(
         id: localId,
-        reference: 'local:$localId',
         fileName: fileName,
-        fileSize: bytes.length,
-        mimeType: 'image/jpeg',
-        createdAt: DateTime.now(),
+        mimeType: fileName.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg',
+        size: bytes.length,
       );
       _receipts[localId] = localInfo;
       _saveLocalState();
@@ -1116,22 +1114,6 @@ class AppState extends ChangeNotifier {
         break;
     }
     _saveLocalState();
-    notifyListeners();
-    unawaited(syncNow());
-  }
-        rangeStart = DateTime(rangeStart.year + direction, 1, 1);
-        rangeEnd = DateTime(rangeStart.year, 12, 31, 23, 59, 59);
-        break;
-      case DateRangeMode.daily:
-        rangeStart = DateTime(rangeStart.year, rangeStart.month,
-            rangeStart.day + direction);
-        rangeEnd = DateTime(rangeStart.year, rangeStart.month,
-            rangeStart.day, 23, 59, 59);
-        break;
-      case DateRangeMode.custom:
-      case DateRangeMode.all:
-        break;
-    }
     notifyListeners();
     unawaited(syncNow());
   }

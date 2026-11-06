@@ -43,7 +43,7 @@ jobs:
         run: flutter pub get
 
       - name: Build Flutter Web
-        run: flutter build web --release --base-href "/student-expense-manager-/"
+        run: flutter build web --release --no-tree-shake-icons --base-href "/student-expense-manager-/"
 
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v5

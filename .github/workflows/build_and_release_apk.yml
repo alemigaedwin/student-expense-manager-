@@ -28,7 +28,6 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.x'
           channel: 'stable'
           cache: true
 
@@ -36,7 +35,7 @@ jobs:
         run: flutter pub get
 
       - name: Build Android Release APK
-        run: flutter build apk --release
+        run: flutter build apk --release --no-tree-shake-icons --android-skip-build-dependency-validation
 
       - name: Prepare APK Asset
         run: |
@@ -44,36 +43,35 @@ jobs:
 
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest' }}
-          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'Student Expense Manager - Latest Android APK' }}
+          tag_name: 'v1.0.0'
+          name: 'Student Expense Manager v1.0.0 (Universal Release)'
           draft: false
           prerelease: false
+          make_latest: true
           body: |
-            ## 📱 Student Expense Manager - Android Release
+            ## 📱 Student Expense Manager — Multi-Platform Release
 
-            ### 🚀 Direct APK Download for Android Phones
-            Click the link below on your phone to download and install the latest APK:
-            👉 **[Download app-release.apk](https://github.com/alemigaedwin/student-expense-manager-/releases/latest/download/app-release.apk)**
-
-            ---
-
-            ### 🌟 Key Capabilities
-            - 📴 **100% Offline Mode**: Complete local data storage on your phone. No internet required!
-            - 🔄 **Automatic Over-The-Air Updates**: When you push new code to GitHub, users are automatically notified in the app to install updates.
-            - 💰 **Expense & Income Tracking**: Record cash, bank, and mobile money transactions.
-            - 📊 **Visual Analytics**: Interactive category breakdown, spending charts, and trends.
-            - 🎯 **Budgets & Alerts**: Set category and overall monthly/weekly spending limits.
-            - 📝 **Student Notebook & Reminders**: Keep bill reminders and notes.
+            ### 🤖 For Android Phones (Direct APK Install)
+            👉 **[Download app-release.apk](https://github.com/alemigaedwin/student-expense-manager-/releases/download/v1.0.0/app-release.apk)**
+            - Tap the download link on your phone.
+            - Open the file and tap **Install** (Allow *"Install unknown apps"* if prompted).
+            - Enjoy 100% offline access with automatic in-app updates!
 
             ---
 
-            ### 📲 How to Install on Android
-            1. Tap the **[Download app-release.apk](https://github.com/alemigaedwin/student-expense-manager-/releases/latest/download/app-release.apk)** link.
-            2. Open the downloaded file from your browser or Downloads folder.
-            3. Tap **Install** (If prompted, allow *"Install unknown apps"* for your browser/file manager).
-            4. Open the app and tap **"Continue in Offline Mode"** to start immediately!
+            ### 🍎 For iPhones (iOS) & 💻 Windows / Mac
+            👉 **[Open Live Web & PWA App](https://alemigaedwin.github.io/student-expense-manager-/)**
+            - **iPhone**: Open in Safari, tap the **Share** button, and tap **"Add to Home Screen"** to install as a native offline app.
+            - **Windows / Mac / PC**: Open in Chrome or Edge, click the **"Install App"** icon in the URL bar to install as an offline desktop application.
+
+            ---
+
+            ### ✨ Key Highlights
+            - 📴 **100% Offline Mode**: Data is saved directly on your phone/device.
+            - 🔄 **Automatic Updates**: App notifies you and updates directly from GitHub.
+            - 💰 **Complete Financial Tools**: Expenses, income, budgets, notebook, reminders, and charts.
           files: |
             app-release.apk
-            build/app/outputs/flutter-apk/app-release.apk
