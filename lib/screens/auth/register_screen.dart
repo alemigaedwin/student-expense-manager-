@@ -1,252 +1,132 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../services/app_state.dart';
-import '../../utils/app_colors.dart';
+import '../../services/local_auth_service.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
-  @override State<RegisterScreen> createState() => _RegisterScreenState();
+
+  @override
+  State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  final name = TextEditingController();
-  final email = TextEditingController();
-  final password = TextEditingController();
-  final confirm = TextEditingController();
-  bool obscurePass = true;
-  bool obscureConfirm = true;
-  bool isRegistering = false;
+  final _formKey = GlobalKey<FormState>();
+  final _name = TextEditingController();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  final _confirm = TextEditingController();
+  bool _saving = false;
+  bool _obscure = true;
 
   @override
   void dispose() {
-    name.dispose();
-    email.dispose();
-    password.dispose();
-    confirm.dispose();
+    _name.dispose();
+    _email.dispose();
+    _password.dispose();
+    _confirm.dispose();
     super.dispose();
   }
 
   Future<void> _register() async {
-    final cleanName = name.text.trim();
-    final cleanEmail = email.text.trim();
-    final pass = password.text;
-    final conf = confirm.text;
-
-    if (cleanName.isEmpty || cleanEmail.isEmpty || pass.isEmpty) {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      await LocalAuthService.register(_name.text, _email.text, _password.text);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill in all fields.')),
+        const SnackBar(content: Text('Account created on this device. You can now sign in offline.')),
       );
-      return;
-    }
-    if (pass != conf) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Passwords do not match.')),
-      );
-      return;
-    }
-    if (pass.length < 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password must be at least 6 characters.')),
-      );
-      return;
-    }
-
-    setState(() => isRegistering = true);
-    final app = context.read<AppState>();
-    final success = await app.registerUser(cleanName, cleanEmail, pass);
-    if (!mounted) return;
-    setState(() => isRegistering = false);
-
-    if (success) {
-      ScaffoldMessenger.of(context)
-        ..clearSnackBars()
-        ..showSnackBar(
-          const SnackBar(
-            content: Text('Account created successfully! Please log in.'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      Navigator.of(context).pop();
-    } else {
-      ScaffoldMessenger.of(context)
-        ..clearSnackBars()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(app.syncError ?? 'Registration failed. Check database connection and try again.'),
-            backgroundColor: Colors.red.shade700,
-            duration: const Duration(seconds: 3),
-          ),
-        );
+      Navigator.pop(context);
+    } on StateError catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not create account: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
+    final app = context.watch<AppState>();
     return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        title: const Text('Create Student Account'),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        foregroundColor: Colors.white,
-      ),
-      body: Stack(
-        children: [
-          // Background: Student Income & Expense Management Illustration
-          Positioned.fill(
-            child: Image.asset(
-              'assets/images/student_income_manage.jpg',
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(color: const Color(0xFF0F172A)),
-            ),
-          ),
-
-          // Gradient scrim overlay
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withOpacity(0.55),
-                    Colors.black.withOpacity(0.85),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // Register Form Card
-          SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 440),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 28),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? const Color(0xFF1E293B).withOpacity(0.92)
-                          : Colors.white.withOpacity(0.95),
-                      borderRadius: BorderRadius.circular(24),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          blurRadius: 25,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.2),
-                        width: 1.2,
+      appBar: AppBar(title: const Text('Create account')),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Icon(Icons.account_balance_wallet_outlined, size: 56),
+                  const SizedBox(height: 12),
+                  Text('Start managing your money', textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  const Text('Your account and financial records are saved on this device and work without internet.', textAlign: TextAlign.center),
+                  const SizedBox(height: 24),
+                  TextFormField(
+                    controller: _name,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(labelText: 'Your name', prefixIcon: Icon(Icons.person_outline)),
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter your name' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _email,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email_outlined)),
+                    validator: (v) {
+                      final value = v?.trim() ?? '';
+                      return value.contains('@') && value.contains('.') ? null : 'Enter a valid email address';
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _password,
+                    obscureText: _obscure,
+                    decoration: InputDecoration(
+                      labelText: 'Password (at least 8 characters)',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        onPressed: () => setState(() => _obscure = !_obscure),
+                        icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
                       ),
                     ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Image.asset('assets/logo/app_logo.png', width: 48, height: 48),
-                            const SizedBox(width: 12),
-                            const Flexible(
-                              child: Text(
-                                'Student Registration',
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-
-                        TextField(
-                          controller: name,
-                          decoration: InputDecoration(
-                            labelText: 'Full Name',
-                            hintText: 'Alex Morgan',
-                            prefixIcon: const Icon(Icons.person_outline),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        TextField(
-                          controller: email,
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: InputDecoration(
-                            labelText: 'Student Email',
-                            hintText: 'student@campus.edu',
-                            prefixIcon: const Icon(Icons.email_outlined),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        TextField(
-                          controller: password,
-                          obscureText: obscurePass,
-                          decoration: InputDecoration(
-                            labelText: 'Password (min 6 chars)',
-                            prefixIcon: const Icon(Icons.lock_outline),
-                            suffixIcon: IconButton(
-                              icon: Icon(obscurePass ? Icons.visibility : Icons.visibility_off),
-                              onPressed: () => setState(() => obscurePass = !obscurePass),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        TextField(
-                          controller: confirm,
-                          obscureText: obscureConfirm,
-                          decoration: InputDecoration(
-                            labelText: 'Confirm Password',
-                            prefixIcon: const Icon(Icons.lock_reset),
-                            suffixIcon: IconButton(
-                              icon: Icon(obscureConfirm ? Icons.visibility : Icons.visibility_off),
-                              onPressed: () => setState(() => obscureConfirm = !obscureConfirm),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
-                        const SizedBox(height: 22),
-
-                        SizedBox(
-                          width: double.infinity,
-                          height: 48,
-                          child: FilledButton(
-                            onPressed: isRegistering ? null : _register,
-                            style: FilledButton.styleFrom(
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            child: isRegistering
-                                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                                : const Text('Create Student Account', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Already registered? Back to Login'),
-                        ),
-                      ],
+                    validator: (v) => (v ?? '').length >= 8 ? null : 'Use at least 8 characters',
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _confirm,
+                    obscureText: true,
+                    decoration: const InputDecoration(labelText: 'Confirm password', prefixIcon: Icon(Icons.lock_reset)),
+                    validator: (v) => v == _password.text ? null : 'Passwords do not match',
+                  ),
+                  const SizedBox(height: 20),
+                  FilledButton(
+                    onPressed: _saving ? null : _register,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: _saving ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Create account'),
                     ),
                   ),
-                ),
+                  const SizedBox(height: 12),
+                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('Already have an account? Sign in')),
+                  if (app.isOfflineMode) const SizedBox.shrink(),
+                ],
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }
