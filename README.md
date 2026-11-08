@@ -6,17 +6,39 @@ Designed with an **Offline-First architecture**: all student records are stored 
 
 ---
 
-## 📲 Direct Download & Install Android APK
+## 📲 All Ways to Download & Install on a Phone
 
-You can download and install the app directly on any Android smartphone:
+For the complete breakdown of every distribution channel, see the **[Detailed Installation Guide](INSTALLATION_GUIDE.md)**.
 
+### 🌟 Option 1: Direct Android APK Download (Recommended)
 👉 **[📥 Click Here to Download app-release.apk](https://github.com/alemigaedwin/student-expense-manager-/releases/latest/download/app-release.apk)**
 
-### ⚡ 3-Step Installation on Android Phones:
-1. Tap the download link above on your phone (or share `app-release.apk` via WhatsApp/Drive).
+#### ⚡ 3-Step Installation on Android:
+1. Tap the download link above on your phone (or scan the QR code below).
 2. Open the downloaded file from your Notifications or **Downloads** folder.
-3. Tap **Install** (If your phone says *"Install unknown apps"*, tap **Settings** and turn **Allow from this source** ON).
-4. Tap **Open**, create your student account or sign in, and start tracking your real expenses! All data is saved directly on your phone and works 100% offline.
+3. Tap **Install** (If your phone says *"Install unknown apps"*, tap **Settings** and turn **Allow from this source** ON. If Google Play Protect asks, choose *"More details"* -> *"Install anyway"*).
+4. Tap **Open** and start tracking your student finances offline!
+
+#### 📷 Scan to Download on Phone:
+<img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https://github.com/alemigaedwin/student-expense-manager-/releases/latest/download/app-release.apk" width="180" alt="Scan QR code to download APK" />
+
+---
+
+### 🍏 Option 2: iPhone (iOS) & Universal Web App (PWA)
+👉 **[Launch Live App on Mobile Safari](https://alemigaedwin.github.io/student-expense-manager-/)**
+👉 **[Mobile Download & Setup Portal](https://alemigaedwin.github.io/student-expense-manager-/download.html)**
+
+1. Open the link above in **Safari** on your iPhone.
+2. Tap the **Share** button (📤 at the bottom toolbar).
+3. Tap **"Add to Home Screen"** (➕) and tap **"Add"**.
+4. The app installs as a native, offline-capable application directly on your iOS home screen!
+
+---
+
+### ⚙️ Option 3: GitHub Actions CI/CD (Automated Builds)
+Whenever you push code or trigger a workflow:
+- `.github/workflows/build_and_release_apk.yml` automatically compiles `app-release.apk` and publishes it to **GitHub Releases** and **Actions Artifacts**.
+- `.github/workflows/deploy-pwa.yml` automatically compiles and deploys the latest PWA to **GitHub Pages**.
 
 ---
 

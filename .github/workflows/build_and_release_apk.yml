@@ -31,6 +31,13 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Configure Android local.properties
+        run: |
+          echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
+          echo "flutter.buildMode=release" >> android/local.properties
+          echo "flutter.versionName=1.0.0" >> android/local.properties
+          echo "flutter.versionCode=1" >> android/local.properties
+
       - name: Accept Android SDK Licenses
         run: yes | flutter doctor --android-licenses || true
 
@@ -41,7 +48,7 @@ jobs:
         run: flutter pub get
 
       - name: Build Android Release APK
-        run: flutter build apk --release --no-tree-shake-icons
+        run: flutter build apk --release --no-tree-shake-icons --verbose
 
       - name: Prepare APK Asset
         run: |
@@ -61,28 +68,22 @@ jobs:
         with:
           tag_name: 'v1.0.0'
           name: 'Student Expense Manager v1.0.0 (Release APK)'
+          body: |
+            ### 📱 Student Expense Manager Mobile App
+
+            #### 📥 Download & Install on Android:
+            - **Direct APK Download**: [Download app-release.apk](https://github.com/${{ github.repository }}/releases/latest/download/app-release.apk)
+            
+            #### ⚡ How to Install:
+            1. Download `app-release.apk` to your phone.
+            2. Tap the file in your notification bar or **Downloads** folder.
+            3. Tap **Install** (if prompted, enable *"Allow from this source"*).
+            4. Launch and start tracking your student finances offline!
+
+            #### 🔄 In-App Updates:
+            This APK automatically checks this repository for newer versions and updates seamlessly.
           draft: false
           prerelease: false
           make_latest: true
-          body: |
-            ## 📱 Student Expense Manager — Android Release
-
-            ### 🚀 Direct Download & Install APK:
-            👉 **[Download app-release.apk](https://github.com/alemigaedwin/student-expense-manager-/releases/download/v1.0.0/app-release.apk)**
-
-            ---
-
-            ### ✨ Real Features
-            - 📴 **100% Offline Mode**: All transactions, budgets, notes, and reminders are stored locally on your phone.
-            - 🔄 **In-App Auto-Updates**: The app checks GitHub Releases for new updates automatically.
-            - 💰 **Student Finances**: Full tracking for cash, cards, bank accounts, and budgets.
-            - 📝 **Student Notebook**: Real notes and bill reminders.
-
-            ---
-
-            ### 📲 How to Install:
-            1. Tap the download link above on your Android phone.
-            2. Tap **Install** (Allow *"Install unknown apps"* if prompted).
-            3. Open the app, create your account or sign in, and enjoy offline expense tracking!
           files: |
             app-release.apk
